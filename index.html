@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <title>Inventory Manager</title>
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/css/materialize.min.css" rel="stylesheet">
+  <style>
+    body { padding: 2rem; }
+    .low { color: red; }
+    .ok { color: green; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h4>Inventory Manager</h4>
+    <div class="row">
+      <form id="transactionForm" class="col s12">
+        <div class="row">
+          <div class="input-field col s6">
+            <select id="itemSelect"></select>
+            <label>Item</label>
+          </div>
+          <div class="input-field col s6">
+            <select id="groupSelect"></select>
+            <label>Group (for outward)</label>
+          </div>
+        </div>
+        <div class="row">
+          <div class="input-field col s6">
+            <select id="direction">
+              <option value="IN">Inward</option>
+              <option value="OUT">Outward</option>
+            </select>
+            <label>Direction</label>
+          </div>
+          <div class="input-field col s6">
+            <input id="quantity" type="number" min="1" required>
+            <label for="quantity">Quantity</label>
+          </div>
+        </div>
+        <div class="row">
+          <div class="input-field col s6">
+            <input id="plantCode" type="text">
+            <label for="plantCode">Plant Code</label>
+          </div>
+          <div class="input-field col s6">
+            <input id="serviceCode" type="text">
+            <label for="serviceCode">Service Code</label>
+          </div>
+        </div>
+        <div class="row">
+          <div class="input-field col s6">
+            <input id="requisition" type="text">
+            <label for="requisition">Requisition #</label>
+          </div>
+          <div class="input-field col s6">
+            <input id="remarks" type="text">
+            <label for="remarks">Remarks</label>
+          </div>
+        </div>
+        <div class="row">
+          <div class="file-field input-field col s12">
+            <div class="btn">
+              <span>Photo</span>
+              <input id="photo" type="file" accept="image/jpeg">
+            </div>
+            <div class="file-path-wrapper">
+              <input class="file-path validate" type="text">
+            </div>
+          </div>
+        </div>
+        <div class="row">
+          <div class="col s12">
+            <p>Current Stock: <span id="stock"></span></p>
+          </div>
+        </div>
+        <button class="btn waves-effect waves-light" type="submit">Submit
+          <i class="material-icons right">send</i>
+        </button>
+      </form>
+    </div>
+  </div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/js/materialize.min.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      M.FormSelect.init(document.querySelectorAll('select'));
+      loadItems();
+      loadGroups();
+      document.getElementById('itemSelect').addEventListener('change', updateStock);
+      document.getElementById('transactionForm').addEventListener('submit', submitForm);
+    });
+
+    function loadItems() {
+      google.script.run.withSuccessHandler(function(items) {
+        const sel = document.getElementById('itemSelect');
+        sel.innerHTML = '<option value="" disabled selected>Choose item</option>';
+        items.forEach(it => {
+          sel.innerHTML += `<option value="${it.id}">${it.name} ${it.make} ${it.model}</option>`;
+        });
+        M.FormSelect.init(sel);
+      }).getItems();
+    }
+
+    function loadGroups() {
+      google.script.run.withSuccessHandler(function(groups) {
+        const sel = document.getElementById('groupSelect');
+        sel.innerHTML = '<option value="" selected>None</option>';
+        groups.forEach(g => {
+          sel.innerHTML += `<option value="${g.name}">${g.name}</option>`;
+        });
+        M.FormSelect.init(sel);
+      }).getGroups();
+    }
+
+    function updateStock() {
+      const id = document.getElementById('itemSelect').value;
+      if (!id) return;
+      google.script.run.withSuccessHandler(function(stock) {
+        const el = document.getElementById('stock');
+        if (!stock) {
+          el.textContent = '';
+          return;
+        }
+        const cls = stock.qty <= stock.critical ? 'low' : 'ok';
+        el.innerHTML = `<span class="${cls}">${stock.qty} (critical: ${stock.critical})</span>`;
+      }).getStock(id);
+    }
+
+    function submitForm(e) {
+      e.preventDefault();
+      const data = {
+        itemId: document.getElementById('itemSelect').value,
+        groupName: document.getElementById('groupSelect').value || '',
+        direction: document.getElementById('direction').value,
+        quantity: Number(document.getElementById('quantity').value),
+        plantCode: document.getElementById('plantCode').value,
+        serviceCode: document.getElementById('serviceCode').value,
+        requisition: document.getElementById('requisition').value,
+        remarks: document.getElementById('remarks').value
+      };
+      const file = document.getElementById('photo').files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onloadend = function() {
+          data.photo = reader.result;
+          runTransaction(data);
+        };
+        reader.readAsDataURL(file);
+      } else {
+        runTransaction(data);
+      }
+    }
+
+    function runTransaction(data) {
+      google.script.run.withSuccessHandler(function(msg) {
+        M.toast({html: msg});
+        loadItems();
+        updateStock();
+        document.getElementById('transactionForm').reset();
+        M.FormSelect.init(document.querySelectorAll('select'));
+      }).recordTransaction(data);
+    }
+  </script>
+</body>
+</html>
